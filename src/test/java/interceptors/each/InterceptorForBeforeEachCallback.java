@@ -10,7 +10,7 @@ import utils.TestLogSignatures;
 
 import java.lang.reflect.Method;
 
-import static utils.Indentation.BEFORE_EACH_ANNOTATION;
+import static utils.Indentation.BEFORE_EACH_CALLBACK;
 
 public class InterceptorForBeforeEachCallback
 {
@@ -20,7 +20,7 @@ public class InterceptorForBeforeEachCallback
     {
 
         System.out.println(
-                StringUtils.prefix( " ", BEFORE_EACH_ANNOTATION ) + TestLogSignatures.BEFORE_EACH_EXTENSION );
+                StringUtils.prefix( " ", BEFORE_EACH_CALLBACK ) + TestLogSignatures.BEFORE_EACH_EXTENSION );
         superMethod.invoke( self, args );
     }
 }

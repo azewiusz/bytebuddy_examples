@@ -33,7 +33,8 @@ public class VisitorWrapperForJUnit5ExtendWithAnnotation implements AsmVisitorWr
     {
 
 
-        return new AnnotationClassVisitor( Opcodes.ASM7, classVisitor, new Class[] { ExtendWith.class } );
+        return new AnnotationClassVisitor( Opcodes.ASM7, classVisitor, new Class[] { ExtendWith.class }, typePool,
+                typeDescription, this );
 
     }
 

@@ -1,16 +1,25 @@
 package visitors;
 
+import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.jar.asm.AnnotationVisitor;
 import net.bytebuddy.jar.asm.ClassVisitor;
+import net.bytebuddy.pool.TypePool;
 
 public class AnnotationClassVisitor extends ClassVisitor
 {
     public Class[] classList;
+    public TypePool typePool;
+    public TypeDescription typeDescription;
+    public VisitorWrapperForJUnit5ExtendWithAnnotation parent;
 
-    public AnnotationClassVisitor( int api, ClassVisitor classVisitor, Class[] classList )
+    public AnnotationClassVisitor( int api, ClassVisitor classVisitor, Class[] classList, TypePool typePool,
+                                   TypeDescription typeDescription, VisitorWrapperForJUnit5ExtendWithAnnotation parent )
     {
         super( api, classVisitor );
         this.classList = classList;
+        this.typePool = typePool;
+        this.typeDescription = typeDescription;
+        this.parent = parent;
     }
 
     public static String getTypeSignature( Class c )
@@ -43,8 +52,9 @@ public class AnnotationClassVisitor extends ClassVisitor
     {
         if ( cv != null )
         {
+            final TypeDescription resolvedType = typePool.describe( description.replace( "/", "." ) ).resolve();
             // TO DO, but how ?
-            cv.visitNestMember( description );
+            //  cv.visitNestMember( description );
         }
     }
 }
