@@ -37,9 +37,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static net.bytebuddy.matcher.ElementMatchers.isAbstract;
-import static net.bytebuddy.matcher.ElementMatchers.not;
-
 public class InstrumentationUtils
 {
     public static List<Class> getExtensionClasses( Class testClass )
@@ -146,7 +143,6 @@ public class InstrumentationUtils
     public static Class stagedTypeTransform( Class originalClass, DynamicType.Unloaded transformedClass )
     {
         String rootPathOfClassLoader = originalClass.getClassLoader().getResource( "." ).getPath();
-        // System.out.println( "Root path : " + rootPathOfClassLoader );
         try
         {
             transformedClass.saveIn( new File( rootPathOfClassLoader ) );
@@ -216,7 +212,7 @@ public class InstrumentationUtils
                 new ByteBuddy().rebase( strippedOffExtendWithAnnotation,
                                 ClassFileLocator.ForClassLoader.of( classLoader ) )
                         .name( testClass.getName() + "BeforeAll" )
-                        .method( not( isAbstract() ).and( ElementMatchers.isAnnotatedWith( BeforeAll.class ) ) )
+                        .method( ElementMatchers.isAnnotatedWith( BeforeAll.class ) )
                         .intercept( MethodDelegation.withDefaultConfiguration()
                                 .to( InterceptorForBeforeAllAnnotation.class ) ).make() );
 
