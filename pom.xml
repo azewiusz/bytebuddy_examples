@@ -61,7 +61,6 @@
             <version>3.8</version>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
 </project>

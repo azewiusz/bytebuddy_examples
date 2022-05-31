@@ -15,7 +15,6 @@ import net.bytebuddy.dynamic.ClassFileLocator;
 import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.matcher.ElementMatchers;
-import net.bytebuddy.pool.TypePool;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,6 +35,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class InstrumentationUtils
 {
@@ -127,15 +127,40 @@ public class InstrumentationUtils
 
     public static Class filterOutJUnit5ExtendWithAnnotation( Class testClass, ClassLoader classLoader )
     {
-        final Class<?> transormedClass = stagedTypeTransform( testClass,
-                new ByteBuddy().rebase( testClass, ClassFileLocator.ForClassLoader.of( classLoader ) )
-                        .name( testClass.getName() + "ProxyStrippedOut" )
-                        .visit( new VisitorWrapperForJUnit5ExtendWithAnnotation() )
-//                        .visit( new AsmVisitorWrapper.ForDeclaredMethods()
-//                                .method( ElementMatchers.isAnnotatedWith( BeforeAll.class )
-//                                                .or( ElementMatchers.isAnnotatedWith( AfterAll.class ) ),
-//                                        new VisitorWrapperForMethods() ) )
-                        .make() );
+        String newTestClass = testClass.getName();
+        String[] classes = newTestClass.split( "\\$" );
+        Class<?> transormedClass = null;
+        Class clazz = null;
+        try
+        {
+            // Load Parent class of the Inner Class
+            clazz = classLoader.loadClass( classes[ 0 ] );
+        }
+        catch ( ClassNotFoundException e )
+        {
+            e.printStackTrace();
+        }
+
+        if ( classes.length > 1 )
+        {
+            // Covers case with inner class transformation (this does not work)
+            transormedClass = stagedTypeTransform( testClass,
+                    new ByteBuddy().rebase( testClass, ClassFileLocator.ForClassLoader.of( classLoader ) )
+                            .name( testClass.getName() + "FilteredOutExtendWithInnerClass" )
+                            .visit( new VisitorWrapperForJUnit5ExtendWithAnnotation() ).innerTypeOf( clazz )
+                            .asMemberType().make() );
+        }
+
+        if ( classes.length == 1 )
+        {
+            // Covers case with a class that has not inner classes (this actually works)
+            transormedClass = stagedTypeTransform( testClass,
+                    new ByteBuddy().redefine( testClass, ClassFileLocator.ForClassLoader.of( classLoader ) )
+                            .name( testClass.getName() + "FilteredOutExtendWith" )
+                            .visit( new VisitorWrapperForJUnit5ExtendWithAnnotation() ).make() );
+
+        }
+
 
         return transormedClass;
     }
@@ -166,8 +191,8 @@ public class InstrumentationUtils
     {
         Class<?> transformedClass = stagedTypeTransform( instrumentedClass,
                 new ByteBuddy().rebase( instrumentedClass, ClassFileLocator.ForClassLoader.of( classLoader ) )
-                        .name( instrumentedClass.getName() + "AnnotateProxy2" )
-                        .annotateType( annotationDescription ).make() );
+                        .name( instrumentedClass.getName() + "AnnotateProxy2" ).annotateType( annotationDescription )
+                        .make() );
         return transformedClass;
     }
 
@@ -189,69 +214,75 @@ public class InstrumentationUtils
         }
     }
 
-    public static Class instrumentTestClass( Class testClass )
+    public static Class[] getDeclaredInnerClasses( Class testClass )
     {
-        ClassLoader classLoader = testClass.getClassLoader();
-        TypePool typePool = TypePool.Default.of( classLoader );
+        return testClass.getNestMembers();
+    }
 
-//        final Class<?> testClass1 = stagedTypeTransform( testClass,
-//                new ByteBuddy().rebase( testClass )
-//                        .name( testClass.getName() + "MakeTestMethodPublic" )
-//                        .method( ElementMatchers.isAnnotatedWith( Test.class ) )
-//                        .intercept( MethodDelegation.to( InterceptorForTestAnnotationNoAction.class ) )
-//                        .transform( Transformer.ForMethod.withModifiers( Visibility.PUBLIC ) )
-//                        .make() );
+    public static Class instrumentTestClass( Class testClassInput, List<Class> exclusions )
+    {
 
+        ClassLoader classLoader = testClassInput.getClassLoader();
+
+        List<Class> nestedClasses = Arrays.stream( getDeclaredInnerClasses( testClassInput ) )
+                .filter( clazz -> !exclusions.contains( clazz ) && !clazz.equals( testClassInput ) )
+                .collect( Collectors.toList() );
+
+
+        Class testClass = testClassInput;
         final AnnotationDescription annotationExtendWith = instrumentTestExtensionClasses( testClass, classLoader );
 
 
         final Class strippedOffExtendWithAnnotation = filterOutJUnit5ExtendWithAnnotation( testClass, classLoader );
 
-
         Class beforeAll = stagedTypeTransform( strippedOffExtendWithAnnotation,
                 new ByteBuddy().rebase( strippedOffExtendWithAnnotation,
-                                ClassFileLocator.ForClassLoader.of( classLoader ) )
-                        .name( testClass.getName() + "BeforeAll" )
+                                ClassFileLocator.ForClassLoader.of( classLoader ) ).name( testClass.getName() + "BeforeAll" )
                         .method( ElementMatchers.isAnnotatedWith( BeforeAll.class ) )
-                        .intercept( MethodDelegation.withDefaultConfiguration()
-                                .to( InterceptorForBeforeAllAnnotation.class ) ).make() );
+                        .intercept( MethodDelegation.to( InterceptorForBeforeAllAnnotation.class ) ).make() );
 
 
         Class afterAll = stagedTypeTransform( beforeAll,
                 new ByteBuddy().rebase( beforeAll, ClassFileLocator.ForClassLoader.of( classLoader ) )
                         .name( testClass.getName() + "AfterAll" )
-                        .method( ElementMatchers.isAnnotatedWith( AfterAll.class ) )
-                        .intercept( MethodDelegation.withDefaultConfiguration()
-                                .to( InterceptorForAfterAllAnnotation.class ) ).make() );
+                        .method( ElementMatchers.isAnnotatedWith( AfterAll.class ) ).intercept(
+                                MethodDelegation.withDefaultConfiguration().to( InterceptorForAfterAllAnnotation.class ) )
+                        .make() );
 
         Class beforeEach = stagedTypeTransform( afterAll,
                 new ByteBuddy().rebase( afterAll, ClassFileLocator.ForClassLoader.of( classLoader ) )
                         .name( testClass.getName() + "BeforeEach" )
-                        .method( ElementMatchers.isAnnotatedWith( BeforeEach.class ) )
-                        .intercept( MethodDelegation.withDefaultConfiguration()
-                                .to( InterceptorForBeforeEachAnnotation.class ) ).make() );
+                        .method( ElementMatchers.isAnnotatedWith( BeforeEach.class ) ).intercept(
+                                MethodDelegation.withDefaultConfiguration().to( InterceptorForBeforeEachAnnotation.class ) )
+                        .make() );
 
         Class afterEach = stagedTypeTransform( beforeEach,
                 new ByteBuddy().rebase( beforeEach, ClassFileLocator.ForClassLoader.of( classLoader ) )
                         .name( testClass.getName() + "AfterEach" )
-                        .method( ElementMatchers.isAnnotatedWith( AfterEach.class ) )
-                        .intercept( MethodDelegation.withDefaultConfiguration()
-                                .to( InterceptorForAfterEachAnnotation.class ) ).make() );
+                        .method( ElementMatchers.isAnnotatedWith( AfterEach.class ) ).intercept(
+                                MethodDelegation.withDefaultConfiguration().to( InterceptorForAfterEachAnnotation.class ) )
+                        .make() );
 
 
-        final Class annotatedTestClass =
-                annotateInstrumentedTestClass( afterEach, annotationExtendWith, classLoader );
+        final Class annotatedTestClass = annotateInstrumentedTestClass( afterEach, annotationExtendWith, classLoader );
 
         final AnnotationDescription annotationDescriptionTest =
                 AnnotationDescription.Builder.ofType( Test.class ).build();
 
         final Class<?> proxyClassTest = stagedTypeTransform( annotatedTestClass,
                 new ByteBuddy().rebase( annotatedTestClass, ClassFileLocator.ForClassLoader.of( classLoader ) )
-                        .name( testClass.getName() + "Proxy4" )
-                        .method( ElementMatchers.isAnnotatedWith( Test.class ) )
+                        .name( testClass.getName() + "Proxy4" ).method( ElementMatchers.isAnnotatedWith( Test.class ) )
                         .intercept( MethodDelegation.to( InterceptorForTestAnnotation.class ) )
-                        //.annotateMethod( annotationDescriptionTest )
                         .make() );
+
+        for ( Class clazz : nestedClasses )
+        {
+            System.out.println( "Rebasing " + clazz.getName() );
+            ArrayList<Class> classSet = new ArrayList<>( exclusions );
+            classSet.add( clazz );
+            // Recursively try to instrument inner classes
+            Class instrumentedInnerClass = instrumentTestClass( clazz, classSet );
+        }
 
         return proxyClassTest;
 

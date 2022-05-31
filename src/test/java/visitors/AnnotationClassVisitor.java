@@ -7,7 +7,7 @@ import net.bytebuddy.pool.TypePool;
 
 public class AnnotationClassVisitor extends ClassVisitor
 {
-    public Class[] classList;
+    public Class<?>[] classList;
     public TypePool typePool;
     public TypeDescription typeDescription;
     public VisitorWrapperForJUnit5ExtendWithAnnotation parent;
@@ -48,13 +48,13 @@ public class AnnotationClassVisitor extends ClassVisitor
         return super.visitAnnotation( description, condition );
     }
 
-    public void visitNestMember( String description )
-    {
-        if ( cv != null )
-        {
-            final TypeDescription resolvedType = typePool.describe( description.replace( "/", "." ) ).resolve();
-            // TO DO, but how ?
-            //  cv.visitNestMember( description );
-        }
-    }
+//    public void visitNestMember( String description )
+//    {
+//        if ( cv != null )
+//        {
+//           // final TypeDescription resolvedType = typePool.describe( description.replace( "/", "." ) ).resolve();
+//         // cv.visitNestMember( description );
+//
+//        }
+//    }
 }
